@@ -1080,11 +1080,37 @@ function App() {
         scale: Math.min(2, window.devicePixelRatio || 2),
         useCORS: true
       });
-      const url = canvas.toDataURL('image/png');
+      const filename = `inlight-day-${cycleDay}.png`;
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const canCreateFile = typeof File === 'function';
+      const shareFile = canCreateFile && blob ? new File([blob], filename, { type: 'image/png' }) : null;
+      const canShareApi = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+      const canShareFiles = !!shareFile && canShareApi && (
+        typeof navigator.canShare !== 'function' || navigator.canShare({ files: [shareFile] })
+      );
+
+      if (canShareFiles) {
+        try {
+          await navigator.share({
+            files: [shareFile],
+            title: 'InLight 每日海报'
+          });
+          return;
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            return;
+          }
+        }
+      }
+
+      const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = url;
-      link.download = `inlight-day-${cycleDay}.png`;
+      link.download = filename;
       link.click();
+      if (blob) {
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
     } finally {
       document.body.removeChild(sandbox);
     }
