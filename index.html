@@ -819,6 +819,7 @@ function App() {
 
   const ADMIN_RESET_MARKER = 'inlight_admin_reset_20260220_v3';
   const WEEKLY_NOTES_SNAPSHOT_KEY = 'inlight_weekly_notes_snapshot';
+  const USED_CARD_INDICES_KEY = 'inlight_used_card_indices';
 
   const getPosterPlantTransform = (day, type) => {
     const dayScale = { 1: 0.68, 2: 0.68, 3: 0.66, 4: 0.64, 5: 0.62, 6: 0.60, 7: 0.58 };
@@ -965,6 +966,7 @@ function App() {
     localStorage.removeItem('inlight_last_checkin_day');
     localStorage.removeItem('inlight_completed');
     localStorage.removeItem('inlight_today_card_index');
+    localStorage.removeItem(USED_CARD_INDICES_KEY);
     setAppState('garden');
     setCycleDay(1);
     setStreak(0);
@@ -1000,9 +1002,27 @@ function App() {
         localStorage.setItem(WEEKLY_NOTES_SNAPSHOT_KEY, JSON.stringify(weeklySnapshot));
       } else {
         const pool = PLANT_SPECIFIC_CARDS[plantType] || PLANT_SPECIFIC_CARDS[0];
-        const randomIndex = Math.floor(Math.random() * pool.length);
+        const allIndices = pool.map((_, idx) => idx);
+        let usedIndices = [];
+        try {
+          const parsed = JSON.parse(localStorage.getItem(USED_CARD_INDICES_KEY) || '[]');
+          if (Array.isArray(parsed)) {
+            usedIndices = parsed
+              .map((n) => Number.parseInt(n, 10))
+              .filter((n) => Number.isInteger(n) && n >= 0 && n < pool.length);
+          }
+        } catch (error) {
+          usedIndices = [];
+        }
+
+        const remainingIndices = allIndices.filter((idx) => !usedIndices.includes(idx));
+        const candidates = remainingIndices.length > 0 ? remainingIndices : allIndices;
+        const randomIndex = candidates[Math.floor(Math.random() * candidates.length)];
+        const nextUsedIndices = Array.from(new Set([...usedIndices, randomIndex]));
+
         setTodayCard(pool[randomIndex]);
-        localStorage.setItem('inlight_today_card_index', randomIndex);
+        localStorage.setItem('inlight_today_card_index', String(randomIndex));
+        localStorage.setItem(USED_CARD_INDICES_KEY, JSON.stringify(nextUsedIndices));
       }
 
       localStorage.setItem('inlight_streak', newStreak);
