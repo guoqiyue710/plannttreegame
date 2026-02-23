@@ -883,7 +883,7 @@ function App() {
     if (currentVisibleDay < cycleDay) {
       const saved = localStorage.getItem(`inlight_note_day_${currentVisibleDay}`) || '';
       setHistorySavedNote(saved);
-      setHistoryNoteInput(saved ? '' : historyNoteInput);
+      setHistoryNoteInput('');
       return;
     }
     setHistorySavedNote('');
@@ -920,12 +920,17 @@ function App() {
       if (activeDay === 7) {
         setTodayCard(FINAL_MESSAGE);
       } else {
-        const savedCardIndex = localStorage.getItem('inlight_today_card_index');
+        const dayCardIndex = localStorage.getItem(`inlight_card_day_${activeDay}`);
+        const savedCardIndex = dayCardIndex !== null ? dayCardIndex : localStorage.getItem('inlight_today_card_index');
         if (savedCardIndex !== null) {
           const pool = PLANT_SPECIFIC_CARDS[type] || PLANT_SPECIFIC_CARDS[0];
-          setTodayCard(pool[parseInt(savedCardIndex)] || pool[0]);
+          setTodayCard(pool[parseInt(savedCardIndex, 10)] || pool[0]);
         } else {
-          setTodayCard(null);
+          const pool = PLANT_SPECIFIC_CARDS[type] || PLANT_SPECIFIC_CARDS[0];
+          const fallbackIndex = Math.floor(Math.random() * pool.length);
+          setTodayCard(pool[fallbackIndex] || pool[0]);
+          localStorage.setItem('inlight_today_card_index', String(fallbackIndex));
+          localStorage.setItem(`inlight_card_day_${activeDay}`, String(fallbackIndex));
         }
       }
       const savedNote = localStorage.getItem(`inlight_note_${todayKey}`) || localStorage.getItem(`inlight_note_day_${activeDay}`);
@@ -971,7 +976,7 @@ function App() {
     const todayKey = getDateKey();
     // 新一轮 7 天开始前，清空上一轮记录
     Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith('inlight_note_') || key.startsWith('inlight_note_day_')) {
+      if (key.startsWith('inlight_note_') || key.startsWith('inlight_note_day_') || key.startsWith('inlight_card_day_')) {
         localStorage.removeItem(key);
       }
     });
@@ -1016,6 +1021,7 @@ function App() {
       if (currentDay === 7) {
         setTodayCard(FINAL_MESSAGE);
         localStorage.setItem('inlight_today_card_index', '-1');
+        localStorage.setItem(`inlight_card_day_${currentDay}`, '-1');
         localStorage.setItem('inlight_completed', 'true');
         const weeklySnapshot = buildWeeklyNotesFromStorage(false);
         localStorage.setItem(WEEKLY_NOTES_SNAPSHOT_KEY, JSON.stringify(weeklySnapshot));
@@ -1041,6 +1047,7 @@ function App() {
 
         setTodayCard(pool[randomIndex]);
         localStorage.setItem('inlight_today_card_index', String(randomIndex));
+        localStorage.setItem(`inlight_card_day_${currentDay}`, String(randomIndex));
         localStorage.setItem(USED_CARD_INDICES_KEY, JSON.stringify(nextUsedIndices));
       }
 
@@ -1111,7 +1118,37 @@ function App() {
     return buildWeeklyNotesFromStorage();
   };
 
+  const currentViewDay = viewDay > 0 ? viewDay : cycleDay;
+
+  const getCardForDay = (day) => {
+    if (day === 7) return FINAL_MESSAGE;
+    if (day < 1 || day > 7) return null;
+
+    const pool = PLANT_SPECIFIC_CARDS[plantType] || PLANT_SPECIFIC_CARDS[0];
+    const storedIndex = localStorage.getItem(`inlight_card_day_${day}`);
+    if (storedIndex !== null) {
+      const parsedIndex = Number.parseInt(storedIndex, 10);
+      if (parsedIndex === -1 && day === 7) return FINAL_MESSAGE;
+      if (Number.isInteger(parsedIndex) && parsedIndex >= 0 && parsedIndex < pool.length) {
+        return pool[parsedIndex];
+      }
+    }
+
+    if (day === cycleDay) return todayCard;
+
+    if (day < cycleDay && pool.length > 0) {
+      const fallbackIndex = ((day * 17) + (plantType * 7)) % pool.length;
+      localStorage.setItem(`inlight_card_day_${day}`, String(fallbackIndex));
+      return pool[fallbackIndex];
+    }
+
+    return null;
+  };
+
+  const displayCard = getCardForDay(currentViewDay);
+
   const openShareModal = () => {
+    if (!displayCard) return;
     setShowShareModal(true);
   };
 
@@ -1122,7 +1159,7 @@ function App() {
 
 
   const copyToClipboard = () => {
-    const text = `🌱 InLight 心灵花园 | Day ${cycleDay}/7\n✨ 今日心情：${todayCard.title}\n"${todayCard.content}"\n#悦见InLight`;
+    const text = `🌱 InLight 心灵花园 | Day ${currentViewDay}/7\n✨ 今日心情：${displayCard ? displayCard.title : ''}\n"${displayCard ? displayCard.content : ''}"\n#悦见InLight`;
     navigator.clipboard.writeText(text).then(() => alert('文案已复制！'));
   };
 
@@ -1310,7 +1347,7 @@ function App() {
   }
 
   // Garden
-  const visibleDay = viewDay > 0 ? viewDay : cycleDay;
+  const visibleDay = currentViewDay;
   const journeyInfo = JOURNEY_TEXTS[visibleDay] || JOURNEY_TEXTS[0];
   const displayPlantDay = isWateredToday ? visibleDay : Math.max(0, visibleDay - 1);
   const canGoPrevDay = visibleDay > 1;
@@ -1383,17 +1420,17 @@ function App() {
           )}
         </div>
         {/* 浇水后内容区 */}
-        {todayCard && (
+        {displayCard && (
            <div className="w-full space-y-5 animate-fade-in-up">
               {/* 卡片区 */}
               <div className="bg-white p-4 rounded-xl shadow-lg border border-[#E6E4DD] relative overflow-hidden group hover:shadow-xl transition-all duration-300 cursor-pointer" onClick={openShareModal}>
                  <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#D88373]"></div>
                  <div className="flex justify-between items-start mb-3 pl-3">
-                    <div className="flex items-center gap-2"><span className="text-xs tracking-widest text-gray-400 uppercase">{cycleDay === 7 ? "Final Chapter" : "Daily Insight"}</span></div>
+                    <div className="flex items-center gap-2"><span className="text-xs tracking-widest text-gray-400 uppercase">{currentViewDay === 7 ? "Final Chapter" : "Daily Insight"}</span></div>
                     <Icon name="share-2" size={16} className="text-gray-300 group-hover:text-[#D88373] transition" />
                  </div>
-                 <h3 className="text-base font-serif font-bold text-[#2C3E30] mb-2 pl-3">{todayCard.title}</h3>
-                 <p className="text-xs text-gray-600 leading-relaxed font-serif pl-3 opacity-90">{todayCard.content}</p>
+                 <h3 className="text-base font-serif font-bold text-[#2C3E30] mb-2 pl-3">{displayCard.title}</h3>
+                 <p className="text-xs text-gray-600 leading-relaxed font-serif pl-3 opacity-90">{displayCard.content}</p>
                  <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end items-center pl-3">
                     <span className="text-[11px] text-[#D88373] font-medium flex items-center gap-1">点击生成海报 <Icon name="chevron-right" size={12}/></span>
                  </div>
@@ -1476,7 +1513,7 @@ function App() {
       </main>
 
       {/* 海报模态框 */}
-      {showShareModal && todayCard && (
+      {showShareModal && displayCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/70 backdrop-blur-md" onClick={closeShareModal}>
            <div className="bg-white rounded-2xl overflow-hidden w-full max-w-sm shadow-2xl animate-fade-in-up max-h-[calc(100dvh-1.5rem)] flex flex-col" onClick={e => e.stopPropagation()}>
               <div className="flex-1 min-h-0 overflow-y-auto">
@@ -1495,8 +1532,8 @@ function App() {
                         </div>
                       </div>
                     </div>
-                    <h2 className="text-base font-serif font-bold text-[#2C3E30] mb-2">{todayCard.title}</h2>
-                    <p className="text-[11px] leading-relaxed font-serif text-gray-600 w-[80%] max-w-[250px] mb-3">“{todayCard.content}”</p>
+                    <h2 className="text-base font-serif font-bold text-[#2C3E30] mb-2">{displayCard.title}</h2>
+                    <p className="text-[11px] leading-relaxed font-serif text-gray-600 w-[80%] max-w-[250px] mb-3">“{displayCard.content}”</p>
                     
                     {/* Day 7 特殊展示: 一周小确幸清单 */}
                     {cycleDay === 7 && (
